@@ -53,6 +53,20 @@ def vitScan(image_id : str, scan_group_csv : str, image_dir : str, feature_dir :
     for _,scan_group in scan_groups:
         batch=np.zeros(len(scan_group,3,patch_size,patch_size))
         for ii, row in enumerate(scan_group.itertuples()):
+            pad=False
+            if row.IPos>(image.shape[3]-patch_size):
+                h=image.shape[3]-row.IPos
+                pad=True
+            else:
+                h=patch_size
+            if row.JPos>(image.shape[4]-patch_size):
+                w=image.shape[4]-row.JPos
+                pad=True
+            else:
+                w=patch_size
+            patch=np.copy(image[0,:,0,row.IPos:(row.IPos+h),row.JPos:(row.JPos+w)])
+            if pad:
+                patch=np.pad(patch,((0,0)(0,patch_size-h),(0,patch_size-w)),constant_values=255)
             batch[ii,:,:,:]=np.copy(image[0,:,0,row.IPos:(row.IPos+patch_size),row.JPos:(row.JPos+patch_size)])
         batch=torch.Tensor(batch,device=device)
         with torch.inference_mode():
