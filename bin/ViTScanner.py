@@ -7,7 +7,12 @@ import numpy as np
 import warnings
 
 #To-Do figure out how to set the arcetecture via string
-def vitScan(image_id : str, scan_group_csv : str, image_dir : str, feature_dir : str, scan_step : int, scan_ds : int, patch_size : int, model_checkpoint : str = None, device : str = 'auto', scan_mask : bool = False):
+def vitScan(image_id : str, scan_group_csv : str, image_dir : str, feature_dir : str, scan_step : int, scan_ds : int, patch_size : int, model_checkpoint : str = None, device : str = 'auto', scan_mask : bool = False,
+            roi_mask_dir : str=None,
+            roi_type : str=None, roi_min_area : int=None, roi_max_area: int=None,
+            vit_model_channels : int=None, batch_size :int=None, scan_group_size : int=None,
+            roi_mask_ds : int=None, complete_scan : bool = False, compute_rois : bool = False, 
+                roi_identifier_model : str = None, roi_thresh : float = None):
     """
     Scans selected patches of an image using a pretrained pytorch model and saves features to a prepaired zarr file. 
 
@@ -51,7 +56,7 @@ def vitScan(image_id : str, scan_group_csv : str, image_dir : str, feature_dir :
     scan_groups_df=pd.read_csv(scan_group_csv)
     scan_groups=scan_groups_df.groupby("Batch")
     for _,scan_group in scan_groups:
-        batch=np.zeros(len(scan_group,3,patch_size,patch_size))
+        batch=np.zeros((len(scan_group),3,patch_size,patch_size))
         for ii, row in enumerate(scan_group.itertuples()):
             pad=False
             if row.IPos>(image.shape[3]-patch_size):
@@ -66,15 +71,15 @@ def vitScan(image_id : str, scan_group_csv : str, image_dir : str, feature_dir :
                 w=patch_size
             patch=np.copy(image[0,:,0,row.IPos:(row.IPos+h),row.JPos:(row.JPos+w)])
             if pad:
-                patch=np.pad(patch,((0,0)(0,patch_size-h),(0,patch_size-w)),constant_values=255)
-            batch[ii,:,:,:]=np.copy(image[0,:,0,row.IPos:(row.IPos+patch_size),row.JPos:(row.JPos+patch_size)])
+                patch=np.pad(patch,((0,0),(0,patch_size-h),(0,patch_size-w)),constant_values=255)
+            batch[ii,:,:,:]=np.copy(patch)
         batch=torch.Tensor(batch,device=device)
         with torch.inference_mode():
             features=model(batch)
         features=features.detach()
         for ii, row in enumerate(scan_group.itertuples()):
-            ipos=row.IPos/scan_step
-            jpos=row.JPos/scan_step
+            ipos=int(row.IPos/scan_step)
+            jpos=int(row.JPos/scan_step)
             zf[f"Features/{scan_ds}"][:,ipos,jpos]=features[ii,:].numpy()
             if scan_mask:
                 zf[f"ScanMask/{scan_ds}"][ipos,jpos]=1

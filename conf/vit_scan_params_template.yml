@@ -1,11 +1,11 @@
 #path to directory of zarrs converted from slides
-image_dir: C:/Users/mawes/Documents/Generic-ViT-Transfer-Learning-Workflow/test_data/test_zarrs/
+image_dir: #no good way to set a default on these...
 
 #path to directory of zarrs storing the ViT feature representstion
-feature_dir: C:/Users/mawes/Documents/Generic-ViT-Transfer-Learning-Workflow/test_data/test_zarrs/
+feature_dir: #no good way to set a default on these...
 
 #path to directory of zarrs storing ROI masks of the slides
-roi_mask_dir: C:/Users/mawes/Documents/Generic-ViT-Transfer-Learning-Workflow/test_data/test_zarrs/
+roi_mask_dir: #no good way to set a default on these...
 
 #label indicating which ROI mask should be used to determine the regions to scan 
 roi_type: "MeanThresh"
