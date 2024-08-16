@@ -5,7 +5,6 @@ import torch.nn as nn
 import numpy as np
 import pandas as pd
 from jsonargparse import CLI
-import matplotlib.pyplot as plt
 
 
 
@@ -94,12 +93,9 @@ def findRegions(roi_mask, roi_min_area=0, roi_max_area=0):
     #if np.max(roi_mask)>1:
     #    section_mask=roi_mask
     #else:
-    plt.imshow(roi_mask)
-    plt.show()
     section_mask=measure.label(roi_mask)
     sections_dict=measure.regionprops_table(section_mask,separator='-',properties=('label','area','bbox'))
     sections_df=pd.DataFrame.from_dict(sections_dict)
-    print(sections_df)
     keep_sections=np.logical_and(np.greater_equal(sections_df.loc[:,"area"],roi_min_area),np.less_equal(sections_df.loc[:,"area"],roi_max_area))
     return sections_df.loc[keep_sections,:]
 

@@ -1,6 +1,8 @@
 #data
 test_*
+model_cache/
 test_data/
+local_conf/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

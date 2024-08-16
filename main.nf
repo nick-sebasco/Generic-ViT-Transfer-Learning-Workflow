@@ -1,7 +1,9 @@
-include {vit_scanner}
+include {vit_scanner} from './src/workflows/vitScanner.nf'
 workflow{
     Channel.fromPath(params.meta_csv)
-        .splitCSV(header: true, strip: true)
-        .set(image_meta)
-    vit_scanner(image_meta)
+        .splitCsv(header: true, strip: true)
+        .map{row -> row.SlideID.replaceAll(/[ -]/,"_")}
+        .filter{ it != ""}
+        .set{image_id}
+    vit_scanner(image_id)
 }
