@@ -1,7 +1,10 @@
 import numpy as np
 import torch
+import torch.nn as nn
+import torch.optim as optim
 import pytest
 from unittest.mock import MagicMock
+
 
 # test_models
 # --------------------
@@ -35,3 +38,27 @@ def mock_zarr(monkeypatch):
 
 # test_training
 # --------------------
+@pytest.fixture
+def small_dummy_train_validate_data():
+    """Fixture to create a small dummy dataset for testing."""
+    inputs = torch.randn(10, 5)  # 10 samples, 5 features
+    targets = torch.randint(0, 2, (10,))  # 10 binary targets
+    return inputs, targets
+
+
+@pytest.fixture
+def simple_train_validate_model():
+    """Fixture to create a simple model for testing."""
+    return nn.Linear(5, 1)  # Linear model with 5 inputs and 1 output
+
+
+@pytest.fixture
+def simple_train_validate_optimizer(simple_train_validate_model):
+    """Fixture to create an optimizer for the model."""
+    return optim.SGD(simple_train_validate_model.parameters(), lr=0.01)
+
+
+@pytest.fixture
+def criterion():
+    """Fixture to create a loss function."""
+    return nn.BCEWithLogitsLoss()  # Binary cross-entropy with logits loss

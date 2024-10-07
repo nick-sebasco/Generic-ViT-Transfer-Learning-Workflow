@@ -1,14 +1,15 @@
-from ignite.engine import Engine, Events
-from ignite.metrics import Average, Loss
-from ignite.handlers import EarlyStopping, ModelCheckpoint
-from ignite.contrib.handlers import TensorboardLogger, global_step_from_engine
 import torch
 import torch.optim as optim
+import ignite
+from ignite.engine import Engine, Events
+from ignite.metrics import Average, Loss
+from ignite.handlers import EarlyStopping, ModelCheckpoint, ParamScheduler
+from ignite.contrib.handlers import TensorboardLogger, global_step_from_engine
+from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
-from dataset import ZarrDataset, load_features
-from models import MLP
-from utils import get_device
-from typing import Tuple, Callable 
+from typing import Tuple, Callable, Optional
+from src.analysis.dataset import ZarrDataset, load_features
+from src.analysis.models import MLP
 
 
 # Training Step Function
@@ -96,7 +97,11 @@ def run_training(
     hidden_dim: int,
     num_epochs: int,
     batch_size: int,
-    learning_rate: float
+    learning_rate: float,
+    targets: Optional[torch.Tensor] = None,
+    early_stopping: dict = {"patience": 5},
+    lr_scheduler: dict = {"milestones": [5, 10], "gamma": 0.1},
+    train_val_split: float = 0.8
 ) -> None:
     """
     Runs the training and validation loop using Ignite's Engine, handling dataset preparation, model initialization, 
@@ -116,6 +121,14 @@ def run_training(
         The size of the mini-batches during training.
     learning_rate : float
         The learning rate for the Adam optimizer.
+    targets: Optional[torch.Tensor] = None
+        The target values.
+    early_stopping : dict
+        Dictionary containing parameters for early stopping (e.g., {"patience": 5}).
+    lr_scheduler : dict
+        Dictionary containing parameters for the learning rate scheduler (e.g., {"step_size": 5, "gamma": 0.1}).
+    train_val_split: float = 0.8
+        The fraction of data to be used for training and held out for validation.
 
     Returns
     -------
@@ -123,10 +136,11 @@ def run_training(
     """
     # Load features and create dataset
     features = load_features(zarr_path, resolution)
-    targets = ...  # Load or generate corresponding targets for these features
+    if targets is None:
+        raise ValueError("targets must be provided by user.")
 
     dataset = ZarrDataset(features, targets)
-    train_size = int(0.8 * len(dataset))
+    train_size = int(train_val_split * len(dataset))
     val_size = len(dataset) - train_size
     train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
 
@@ -134,7 +148,7 @@ def run_training(
     val_loader = DataLoader(val_dataset, batch_size=batch_size)
 
     # Define device and model
-    device = get_device()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     input_dim = features.shape[0]
     model = MLP(input_dim=input_dim, hidden_dim=hidden_dim).to(device)
 
@@ -142,9 +156,20 @@ def run_training(
     criterion = torch.nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
+    # Utilize Ignite's ParamScheduler for learning rate decay using milestones
+    lr_scheduler_ignite = ParamScheduler.param_scheduler.StepParamScheduler(
+        optimizer=optimizer,
+        param_name='lr',
+        values=[learning_rate * (lr_scheduler["gamma"] ** i) for i in range(len(lr_scheduler["milestones"]) + 1)],
+        milestones=lr_scheduler["milestones"]
+    )
+
     # Create trainer and evaluator engines
     trainer = Engine(train_step(model, criterion, optimizer, device))
     evaluator = Engine(validation_step(model, criterion, device))
+
+    # Attach the ParamScheduler to modify learning rate
+    trainer.add_event_handler(Events.EPOCH_COMPLETED, lr_scheduler_ignite)
 
     # Attach loss metrics to evaluator
     Loss(criterion).attach(evaluator, 'loss')
@@ -168,7 +193,7 @@ def run_training(
 
     # Early stopping
     early_stopping_handler = EarlyStopping(
-        patience=5, 
+        patience=early_stopping["patience"], 
         score_function=lambda engine: -engine.state.metrics['avg_loss'], 
         trainer=trainer
     )
