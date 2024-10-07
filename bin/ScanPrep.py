@@ -207,7 +207,8 @@ def prepForViT(image_id : str, image_dir : str, feature_dir : str, roi_mask_dir 
     zi=zi["0"]
     zf=zarr.open(feature_path, mode='a')
     zf.zeros(f"Features/{scan_ds}",shape=(vit_model_channels,int(np.ceil(zi[f"{scan_ds}"].shape[3]/scan_step)),int(np.ceil(zi[f"{scan_ds}"].shape[4]/scan_step))),chunks=(vit_model_channels,1,1),overwrite=True)
-    zf.zeros(f"ScanMask/{scan_ds}",shape=(int(np.ceil(zi[f"{scan_ds}"].shape[3]/scan_step)),int(np.ceil(zi[f"{scan_ds}"].shape[4]/scan_step))),chunks=(1,1),overwrite=True)
+    if scan_mask:
+        zf.zeros(f"ScanMask/{scan_ds}",shape=(int(np.ceil(zi[f"{scan_ds}"].shape[3]/scan_step)),int(np.ceil(zi[f"{scan_ds}"].shape[4]/scan_step))),chunks=(1,1),overwrite=True)
 
     # compute roi mask if nessasary or indicated by parameters
     zm=zarr.open(roi_mask_path)
