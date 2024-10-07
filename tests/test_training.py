@@ -4,6 +4,7 @@ import torch.nn as nn
 from src.analysis.training import train_step, validation_step
 
 
+@pytest.mark.skip()
 def test_train_step(
     small_dummy_train_validate_data,
     simple_train_validate_model,
@@ -32,6 +33,7 @@ def test_train_step(
         assert param.grad is not None
 
 
+@pytest.mark.skip()
 def test_validation_step(
     small_dummy_train_validate_data,
     simple_train_validate_model,

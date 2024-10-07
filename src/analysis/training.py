@@ -7,7 +7,7 @@ from ignite.handlers import EarlyStopping, ModelCheckpoint, ParamScheduler
 from ignite.contrib.handlers import TensorboardLogger, global_step_from_engine
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
-from typing import Tuple, Callable, Optional
+from typing import Tuple, Callable, Optional, List
 from src.analysis.dataset import ZarrDataset, load_features
 from src.analysis.models import MLP
 
@@ -94,13 +94,23 @@ def validation_step(
 def run_training(
     zarr_path: str,
     resolution: str,
-    hidden_dim: int,
+    hidden_dims: List[int],
     num_epochs: int,
     batch_size: int,
     learning_rate: float,
     targets: Optional[torch.Tensor] = None,
-    early_stopping: dict = {"patience": 5},
+    early_stopping: dict = {
+        "patience": 5,
+        "score_function": lambda engine: -engine.state.metrics['loss'],  # Default to 'loss'
+    },
     lr_scheduler: dict = {"milestones": [5, 10], "gamma": 0.1},
+    checkpointing: dict = {
+        "dirname": "models",
+        "filename_prefix": "best",
+        "n_saved": 1,
+        "score_function": lambda engine: -engine.state.metrics['loss'],  # Default to 'loss'
+        "score_name": "val_loss",
+    },
     train_val_split: float = 0.8
 ) -> None:
     """
@@ -113,8 +123,8 @@ def run_training(
         The path to the Zarr file storing the feature data.
     resolution : str
         The resolution level to load from the Zarr dataset.
-    hidden_dim : int
-        The size of the hidden layer in the MLP model.
+    hidden_dims : List[int]
+        A list of integers where each element specifies the number of units in the corresponding hidden layer.
     num_epochs : int
         The number of epochs to train for.
     batch_size : int
@@ -127,6 +137,8 @@ def run_training(
         Dictionary containing parameters for early stopping (e.g., {"patience": 5}).
     lr_scheduler : dict
         Dictionary containing parameters for the learning rate scheduler (e.g., {"step_size": 5, "gamma": 0.1}).
+    checkpointing : dict
+        Dictionary containing parameters for checkpointing (e.g., {"dirname": "models", "filename_prefix": "best"}).
     train_val_split: float = 0.8
         The fraction of data to be used for training and held out for validation.
 
@@ -150,15 +162,14 @@ def run_training(
     # Define device and model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     input_dim = features.shape[0]
-    model = MLP(input_dim=input_dim, hidden_dim=hidden_dim).to(device)
+    model = MLP(input_dim=input_dim, hidden_dims=hidden_dims).to(device)
 
     # Define loss and optimizer
     criterion = torch.nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
     # Utilize Ignite's ParamScheduler for learning rate decay using milestones
-    lr_scheduler_ignite = ParamScheduler.param_scheduler.StepParamScheduler(
-        optimizer=optimizer,
+    lr_scheduler_ignite = ParamScheduler(
         param_name='lr',
         values=[learning_rate * (lr_scheduler["gamma"] ** i) for i in range(len(lr_scheduler["milestones"]) + 1)],
         milestones=lr_scheduler["milestones"]
@@ -194,19 +205,19 @@ def run_training(
     # Early stopping
     early_stopping_handler = EarlyStopping(
         patience=early_stopping["patience"], 
-        score_function=lambda engine: -engine.state.metrics['avg_loss'], 
+        score_function=early_stopping["score_function"], 
         trainer=trainer
     )
     evaluator.add_event_handler(Events.COMPLETED, early_stopping_handler)
 
     # Checkpointing
     checkpoint_handler = ModelCheckpoint(
-        dirname='models', 
-        filename_prefix='best', 
-        n_saved=1,
+        dirname=checkpointing["dirname"],
+        filename_prefix=checkpointing["filename_prefix"],
+        n_saved=checkpointing["n_saved"],
         create_dir=True,
-        score_function=lambda engine: -engine.state.metrics['avg_loss'], 
-        score_name="val_loss"
+        score_function=checkpointing["score_function"],
+        score_name=checkpointing["score_name"]
     )
 
     trainer.add_event_handler(Events.EPOCH_COMPLETED, checkpoint_handler, {"model": model})
@@ -220,15 +231,3 @@ def run_training(
 
     trainer.run(train_loader, max_epochs=num_epochs)
     tb_logger.close()
-
-
-# Usage
-if __name__ == "__main__":
-    run_training(
-        zarr_path='path_to_feature_zarr',
-        resolution='1',
-        hidden_dim=512,
-        num_epochs=50,
-        batch_size=32,
-        learning_rate=0.001
-    )

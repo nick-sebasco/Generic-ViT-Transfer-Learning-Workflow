@@ -49,9 +49,18 @@ def load_features(zarr_path: str, resolution: str) -> np.ndarray:
     np.ndarray
         A 2D array of valid features where invalid positions have been filtered out based on the scan mask.
     """
-    features_zarr = zarr.open(zarr_path, mode="r")
-    features = features_zarr[f"Features/{resolution}"]
-    scan_mask = features_zarr[f"ScanMask/{resolution}"]
-    valid_positions = scan_mask[:] == 1
-    valid_features = features[:, valid_positions]
+    # Open the Zarr store
+    features_zarr = zarr.open(zarr_path, mode='r')
+    
+    # Load features and scan mask
+    features = features_zarr[f'Features/{resolution}']
+    scan_mask = features_zarr[f'ScanMask/{resolution}']
+    
+    # Convert to NumPy arrays
+    features_np = np.array(features)
+    scan_mask_np = np.array(scan_mask)
+    
+    # Select only valid positions using the scan mask
+    valid_features = features_np[:, scan_mask_np]
+    
     return valid_features
