@@ -1,0 +1,16 @@
+name: vit_env
+channels:
+  - defaults
+dependencies:
+  - python=3.9
+  - pytorch
+  - cudatoolkit
+  - torchvision
+  - torchaudio
+  - pytest
+  - black
+  - ignite
+  - pandas
+  - zarr
+  - numpy
+prefix: /home/nick/anaconda3/envs/vit_env
