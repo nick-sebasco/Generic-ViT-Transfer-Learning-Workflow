@@ -64,3 +64,8 @@ def load_features(zarr_path: str, resolution: str) -> np.ndarray:
     valid_features = features_np[:, scan_mask_np]
     
     return valid_features
+
+
+def load_targets(meta_data_path: str, image_id: str):
+    """
+    """

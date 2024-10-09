@@ -163,3 +163,7 @@ cython_debug/
 
 # Other
 IGNORE_*
+tb_logs
+data
+models
+*.zarr

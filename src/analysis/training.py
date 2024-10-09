@@ -3,13 +3,14 @@ import torch.optim as optim
 import ignite
 from ignite.engine import Engine, Events
 from ignite.metrics import Average, Loss
-from ignite.handlers import EarlyStopping, ModelCheckpoint, ParamScheduler
-from ignite.contrib.handlers import TensorboardLogger, global_step_from_engine
+from ignite.handlers import EarlyStopping, ModelCheckpoint, global_step_from_engine
+from ignite.handlers.tensorboard_logger import *
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
 from typing import Tuple, Callable, Optional, List
 from src.analysis.dataset import ZarrDataset, load_features
 from src.analysis.models import MLP
+from src.analysis.utils import piecewise_linear_lr_scheduler
 
 
 # Training Step Function
@@ -58,7 +59,7 @@ def validation_step(
     model: torch.nn.Module,
     criterion: torch.nn.Module,
     device: torch.device
-) -> Callable[[ignite.engine.Engine, Tuple[torch.Tensor, torch.Tensor]], float]:
+) -> Callable[[ignite.engine.Engine, Tuple[torch.Tensor, torch.Tensor]], float]: # TODO: return value is off
     """
     Returns a validation step function to be used in an Ignite Engine for each iteration of validation.
     This function performs forward propagation on the model in evaluation mode and computes the loss.
@@ -86,7 +87,7 @@ def validation_step(
             y_hat = model(x)
             y_hat = torch.squeeze(y_hat)
             loss = criterion(y_hat, t.float())
-        return loss.item()
+        return y_hat, t  # Return predictions and targets
     return _validation_step
 
 
@@ -98,20 +99,26 @@ def run_training(
     num_epochs: int,
     batch_size: int,
     learning_rate: float,
+    output_dim: int = 1,
+    # TODO: image id key in csv that corresponds to target information
     targets: Optional[torch.Tensor] = None,
     early_stopping: dict = {
         "patience": 5,
-        "score_function": lambda engine: -engine.state.metrics['loss'],  # Default to 'loss'
+        "score_function": lambda engine: -engine.state.metrics['loss']
     },
-    lr_scheduler: dict = {"milestones": [5, 10], "gamma": 0.1},
+    lr_scheduler: dict = {
+        "use_lr_scheduler": True,
+        "milestone_values": [(0, 1e-5), (0.1, 5e-4), (1, 1e-6)]
+    },
     checkpointing: dict = {
         "dirname": "models",
         "filename_prefix": "best",
-        "n_saved": 1,
-        "score_function": lambda engine: -engine.state.metrics['loss'],  # Default to 'loss'
+        "n_saved": 2,
+        "score_function": lambda engine: -engine.state.metrics['loss'],
         "score_name": "val_loss",
     },
-    train_val_split: float = 0.8
+    train_val_split: float = 0.8,
+    use_tensorboard: bool = True
 ) -> None:
     """
     Runs the training and validation loop using Ignite's Engine, handling dataset preparation, model initialization, 
@@ -129,18 +136,20 @@ def run_training(
         The number of epochs to train for.
     batch_size : int
         The size of the mini-batches during training.
-    learning_rate : float
+    learning_rate : float(
         The learning rate for the Adam optimizer.
     targets: Optional[torch.Tensor] = None
         The target values.
     early_stopping : dict
         Dictionary containing parameters for early stopping (e.g., {"patience": 5}).
-    lr_scheduler : dict
+    lr_scheduler: dict
         Dictionary containing parameters for the learning rate scheduler (e.g., {"step_size": 5, "gamma": 0.1}).
     checkpointing : dict
         Dictionary containing parameters for checkpointing (e.g., {"dirname": "models", "filename_prefix": "best"}).
     train_val_split: float = 0.8
         The fraction of data to be used for training and held out for validation.
+    use_tensorboard: bool = True
+        A boolean which determines whether or not to use tensorboard.
 
     Returns
     -------
@@ -162,45 +171,48 @@ def run_training(
     # Define device and model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     input_dim = features.shape[0]
-    model = MLP(input_dim=input_dim, hidden_dims=hidden_dims).to(device)
+    model = MLP(input_dim=input_dim, hidden_dims=hidden_dims, output_dim=output_dim).to(device)
 
     # Define loss and optimizer
     criterion = torch.nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
-    # Utilize Ignite's ParamScheduler for learning rate decay using milestones
-    lr_scheduler_ignite = ParamScheduler(
-        param_name='lr',
-        values=[learning_rate * (lr_scheduler["gamma"] ** i) for i in range(len(lr_scheduler["milestones"]) + 1)],
-        milestones=lr_scheduler["milestones"]
-    )
-
     # Create trainer and evaluator engines
     trainer = Engine(train_step(model, criterion, optimizer, device))
     evaluator = Engine(validation_step(model, criterion, device))
 
-    # Attach the ParamScheduler to modify learning rate
-    trainer.add_event_handler(Events.EPOCH_COMPLETED, lr_scheduler_ignite)
+    # Attach learning rate scheduler
+    if lr_scheduler["use_lr_scheduler"]:
+        num_training_steps = num_epochs * len(train_loader)
+        scheduler = piecewise_linear_lr_scheduler(
+            num_training_steps,
+            optimizer,
+            lr_scheduler["milestone_values"]
+        )
+        trainer.add_event_handler(Events.EPOCH_COMPLETED, scheduler)
 
     # Attach loss metrics to evaluator
     Loss(criterion).attach(evaluator, 'loss')
 
-    # Define Tensorboard Logger
-    tb_logger = TensorboardLogger(log_dir="./tb_logs")
+    if use_tensorboard:
+        # Define Tensorboard Logger
+        tb_logger = TensorboardLogger(log_dir="./tb_logs")
 
-    # Attach handler to log training loss at each iteration
-    tb_logger.attach(
-        trainer,
-        log_handler=TensorboardLogger.OutputHandler(tag="training", output_transform=lambda loss: {"batch_loss": loss}),
-        event_name=Events.ITERATION_COMPLETED,
-    )
+        # Attach handler to log training loss at each iteration
+        tb_logger.attach_output_handler(
+            trainer,
+            event_name=Events.ITERATION_COMPLETED,
+            tag="training",
+            output_transform=lambda loss: {"batch_loss": loss}
+        )
 
-    # Attach handler to log validation loss at each epoch
-    tb_logger.attach(
-        evaluator,
-        log_handler=TensorboardLogger.OutputHandler(tag="validation", metric_names=["loss"]),
-        event_name=Events.EPOCH_COMPLETED,
-    )
+        # Attach handler to log validation loss at each epoch
+        tb_logger.attach_output_handler(
+            evaluator,
+            event_name=Events.EPOCH_COMPLETED,
+            tag="validation",
+            metric_names=["loss"]
+        )
 
     # Early stopping
     early_stopping_handler = EarlyStopping(
@@ -210,18 +222,6 @@ def run_training(
     )
     evaluator.add_event_handler(Events.COMPLETED, early_stopping_handler)
 
-    # Checkpointing
-    checkpoint_handler = ModelCheckpoint(
-        dirname=checkpointing["dirname"],
-        filename_prefix=checkpointing["filename_prefix"],
-        n_saved=checkpointing["n_saved"],
-        create_dir=True,
-        score_function=checkpointing["score_function"],
-        score_name=checkpointing["score_name"]
-    )
-
-    trainer.add_event_handler(Events.EPOCH_COMPLETED, checkpoint_handler, {"model": model})
-
     # Run training
     @trainer.on(Events.EPOCH_COMPLETED)
     def validate_and_log_results(engine):
@@ -229,5 +229,22 @@ def run_training(
         metrics = evaluator.state.metrics
         print(f"Epoch {engine.state.epoch} - Validation Loss: {metrics['loss']:.4f}")
 
+    # Checkpointing
+    checkpoint_handler = ModelCheckpoint(
+        dirname=checkpointing["dirname"],
+        filename_prefix=checkpointing["filename_prefix"],
+        n_saved=checkpointing["n_saved"],
+        create_dir=True,
+        score_function=checkpointing["score_function"],
+        score_name=checkpointing["score_name"],
+        require_empty=False,  # Allow saving even if the directory is not empty
+        global_step_transform=global_step_from_engine(trainer)
+    )
+
+    evaluator.add_event_handler(Events.EPOCH_COMPLETED, checkpoint_handler, {"model": model})
+    
+    # Start trainer
     trainer.run(train_loader, max_epochs=num_epochs)
-    tb_logger.close()
+
+    if use_tensorboard:
+        tb_logger.close()

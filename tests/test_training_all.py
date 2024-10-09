@@ -101,4 +101,3 @@ def test_run_training():
         shutil.rmtree(zarr_path)
     except OSError as e:
         print("Error: %s - %s." % (e.filename, e.strerror))
-
