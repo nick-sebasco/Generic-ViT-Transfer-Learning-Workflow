@@ -112,10 +112,11 @@ def run_training(
     },
     checkpointing: dict = {
         "dirname": "models",
+        "backup_location": None, # secondary checkpoint save location.  ex. "backups"
         "filename_prefix": "best",
         "n_saved": 2,
         "score_function": lambda engine: -engine.state.metrics['loss'],
-        "score_name": "val_loss",
+        "score_name": "val_loss"
     },
     train_val_split: float = 0.8,
     use_tensorboard: bool = True
@@ -242,6 +243,20 @@ def run_training(
     )
 
     evaluator.add_event_handler(Events.EPOCH_COMPLETED, checkpoint_handler, {"model": model})
+
+    # save checkpoints to two places
+    if checkpointing["backup_location"] is not None:
+        checkpoint_handler_secondary = ModelCheckpoint(
+            dirname=checkpointing["backup_location"],
+            filename_prefix=checkpointing["filename_prefix"],
+            n_saved=checkpointing["n_saved"],
+            create_dir=True,
+            score_function=checkpointing["score_function"],
+            score_name=checkpointing["score_name"],
+            require_empty=False,
+            global_step_transform=global_step_from_engine(trainer)
+        )
+        evaluator.add_event_handler(Events.EPOCH_COMPLETED, checkpoint_handler_secondary, {"model": model})
     
     # Start trainer
     trainer.run(train_loader, max_epochs=num_epochs)
