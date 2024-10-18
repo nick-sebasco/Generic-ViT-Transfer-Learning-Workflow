@@ -26,11 +26,11 @@ def inference(image_id, zarr_dir_path, model, scan_ds, num_out_channels):
     mean_out=np.mean(out_channels,axis=0,keepdims=True)
     patch_out_df=pd.DataFrame(out_channels,columns=[f"X{ch}" for ch in range(num_out_channels)])
     patch_meta_df=pd.DataFrame.from_dict({"SlideID":image_id_list,"YPos":i_pos,"XPos":j_pos})
-    patch_df=pd.concat((patch_meta_df,patch_out_df),ignore_index=True,axis=1)
+    patch_df=pd.concat((patch_meta_df,patch_out_df),axis=1)
     patch_df.to_csv(f"Patch_Scores_{image_id}.csv",index=False)
     mean_out_df=pd.DataFrame(mean_out,columns=[f"X{ch}" for ch in range(num_out_channels)])
-    mean_meta_df=pd.DataFrame.from_dict({"SlideID":image_id_list})
-    mean_df=pd.concat((mean_meta_df,mean_out_df),ignore_index=True,axis=1)
+    mean_meta_df=pd.DataFrame.from_dict({"SlideID":[image_id]})
+    mean_df=pd.concat((mean_meta_df,mean_out_df),axis=1)
     mean_df.to_csv(f"Slide_Scores_{image_id}.csv",index=False)
 
 
