@@ -3,6 +3,8 @@ import torch
 import zarr
 from torch.utils.data import Dataset
 from typing import Tuple, Optional
+import pandas as pd
+import os
 
 
 class ZarrDataset(Dataset):
@@ -20,16 +22,37 @@ class ZarrDataset(Dataset):
         will only return the features.
     """
 
-    def __init__(self, features: torch.Tensor, targets: Optional[torch.Tensor] = None):
-        self.features = features
-        self.targets = targets
+    def __init__(self, image_ids, feature_zarr_dir, agg_type, scan_ds, meta_data_path: Optional[str] = None, target_column: Optional[str]=None, class_order: Optional[torch.Tensor]=None, ordinal: Optional[bool]=False):
+        self.image_ids = image_ids
+        self.feature_zarr_dir=feature_zarr_dir
+        self.zarr_idx=f"SlideLevelFeatures/{agg_type}/{scan_ds}"
+        if meta_data_path is not None:
+            if target_column is None:
+                raise ValueError("If metadata_path is provided target_column must be as well")
+            meta_df=pd.read_csv(meta_data_path)
+            id_idx=[]
+            for id in image_ids:
+                id_idx.append(meta_df.index[meta_df["SlideID"]==id].to_list()[0])
+            meta_targets=meta_df.loc[id_idx,target_column].to_numpy()
+            if class_order:
+                targets=torch.zeros((len(image_ids),len(class_order)))
+                for ii,id in enumerate(image_ids):
+                    targets[ii,:]=np.equal(class_order,id)
+                    if ordinal and np.any(targets[ii:]):
+                        targets[ii,:np.where(targets[ii,:])[0][0]]=1
+            else:
+                targets=meta_targets.reshape((-1,1))
+        self.targets = torch.tensor(targets).view
 
     def __len__(self) -> int:
         return self.features.shape[1]
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        x = self.features[:, idx]
-        t = self.targets[idx] if self.targets is not None else None
+        image_id=self.image_ids[idx]
+        z=zarr.open(os.path.join(self.feature_zarr_dir,f"ViT_features_{image_id}.zarr"),"r")
+        x=z[self.zarr_idx][:,:]
+        x=torch.tensor(x)
+        t=self.targets[idx,:]
         return x, t
 
 
