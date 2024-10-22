@@ -13,6 +13,9 @@ class ZarrDataset(Dataset):
 
     Parameters
     ----------
+
+    TODO: re-write doc string
+
     features : np.ndarray or torch.Tensor
         The feature data, typically a 2D array where the first dimension is the number of features
         and the second dimension is the number of samples.
