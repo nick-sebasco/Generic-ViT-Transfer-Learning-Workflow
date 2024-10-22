@@ -1,8 +1,10 @@
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import pytest
+import zarr
 from unittest.mock import MagicMock
 
 
@@ -17,24 +19,42 @@ def dummy_input():
 # test_dataset
 # --------------------
 @pytest.fixture
-def dummy_features_targets():
-    """Fixture to create dummy feature and target arrays."""
-    length = 100
-    features = torch.randn(3, length)  # 3 features, {length} samples
-    targets = torch.randint(0, 2, (length,))  # {length} binary targets
-    return features, targets, length
+def dummy_image_ids():
+    return ['image_1', 'image_2', 'image_3']
 
 
 @pytest.fixture
-def mock_zarr(monkeypatch):
-    """Fixture to mock Zarr data access."""
-    zarr_mock = MagicMock()
-    features = np.random.rand(3, 100, 100)  # 3 features, 100x100 grid
-    scan_mask = np.ones((100, 100))  # All positions valid (mask == 1)
-    zarr_mock.open.return_value = {'Features/1': features, 'ScanMask/1': scan_mask}
-    monkeypatch.setattr('src.analysis.dataset.zarr', zarr_mock)
-    return zarr_mock
+def dummy_feature_dir(tmp_path):
+    # Create a temporary directory for feature zarrs
+    feature_dir = tmp_path / "features"
+    feature_dir.mkdir()
+    return feature_dir
 
+
+@pytest.fixture
+def dummy_zarr_files(dummy_image_ids, dummy_feature_dir):
+    # Create dummy zarr files for each image_id
+    for image_id in dummy_image_ids:
+        zarr_path = dummy_feature_dir / f"ViT_features_{image_id}.zarr"
+        zarr_dataset = zarr.open(str(zarr_path), mode='w')
+        # Create dummy features
+        zarr_dataset.create_dataset(
+            "SlideLevelFeatures/mean/1.0", data=np.random.rand(1, 768)
+        )
+    return dummy_feature_dir
+
+
+@pytest.fixture
+def dummy_metadata(tmp_path, dummy_image_ids):
+    # Create a dummy metadata CSV file
+    metadata_path = tmp_path / "metadata.csv"
+    data = {
+        'image_id': dummy_image_ids,
+        'target': [0, 1, 2]
+    }
+    df = pd.DataFrame(data)
+    df.to_csv(metadata_path, index=False)
+    return str(metadata_path)
 
 # test_training
 # --------------------
