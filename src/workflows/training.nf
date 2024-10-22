@@ -12,7 +12,7 @@ include {CSVCombiner as SlideCSVCombiner} from './modules/CSVHandlingUtils'
 //    """
 //    python3 $projectDir/bin/Inference.py $image_id $params.feature_dir_path $params.scan_ds
 //    """
-}
+//}
 
 process TrainHead{
     label 'pytorch'
