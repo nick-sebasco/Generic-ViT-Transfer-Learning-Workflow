@@ -93,31 +93,29 @@ def validation_step(
 
 # Training Function
 def run_training(
-    zarr_path: str,
-    resolution: str,
+    train_dataset: ZarrDataset,
+    val_dataset: ZarrDataset,
     hidden_dims: List[int],
     num_epochs: int,
     batch_size: int,
     learning_rate: float,
     output_dim: int = 1,
-    # TODO: image id key in csv that corresponds to target information
-    targets: Optional[torch.Tensor] = None,
     early_stopping: dict = {
         "patience": 5,
-        "score_function": lambda engine: -engine.state.metrics['loss']
+        "score_function": lambda engine: -engine.state.metrics['loss'],
     },
     lr_scheduler: dict = {
         "use_lr_scheduler": True,
-        "milestone_values": [(0, 1e-5), (0.1, 5e-4), (1, 1e-6)]
+        "milestone_values": [(0, 1e-5), (0.1, 5e-4), (1, 1e-6)],
     },
     checkpointing: dict = {
         "dirname": "models",
+        "backup_location": None,  # secondary checkpoint save location. ex. "backups"
         "filename_prefix": "best",
         "n_saved": 2,
         "score_function": lambda engine: -engine.state.metrics['loss'],
         "score_name": "val_loss",
     },
-    train_val_split: float = 0.8,
     use_tensorboard: bool = True
 ) -> None:
     """
@@ -155,22 +153,16 @@ def run_training(
     -------
     None
     """
-    # Load features and create dataset
-    features = load_features(zarr_path, resolution)
-    if targets is None:
-        raise ValueError("targets must be provided by user.")
-
-    dataset = ZarrDataset(features, targets)
-    train_size = int(train_val_split * len(dataset))
-    val_size = len(dataset) - train_size
-    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
-
+    # Create data loaders
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size)
 
     # Define device and model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    input_dim = features.shape[0]
+
+    # Determine input dimension from a sample
+    sample_feature, _ = train_dataset[0]
+    input_dim = sample_feature.numel()
     model = MLP(input_dim=input_dim, hidden_dims=hidden_dims, output_dim=output_dim).to(device)
 
     # Define loss and optimizer
@@ -185,49 +177,36 @@ def run_training(
     if lr_scheduler["use_lr_scheduler"]:
         num_training_steps = num_epochs * len(train_loader)
         scheduler = piecewise_linear_lr_scheduler(
-            num_training_steps,
-            optimizer,
-            lr_scheduler["milestone_values"]
+            num_training_steps, optimizer, lr_scheduler["milestone_values"]
         )
         trainer.add_event_handler(Events.EPOCH_COMPLETED, scheduler)
 
     # Attach loss metrics to evaluator
     Loss(criterion).attach(evaluator, 'loss')
 
+    # TensorBoard logging
     if use_tensorboard:
-        # Define Tensorboard Logger
         tb_logger = TensorboardLogger(log_dir="./tb_logs")
-
-        # Attach handler to log training loss at each iteration
         tb_logger.attach_output_handler(
             trainer,
             event_name=Events.ITERATION_COMPLETED,
             tag="training",
-            output_transform=lambda loss: {"batch_loss": loss}
+            output_transform=lambda loss: {"batch_loss": loss},
         )
-
-        # Attach handler to log validation loss at each epoch
         tb_logger.attach_output_handler(
             evaluator,
             event_name=Events.EPOCH_COMPLETED,
             tag="validation",
-            metric_names=["loss"]
+            metric_names=["loss"],
         )
 
     # Early stopping
     early_stopping_handler = EarlyStopping(
-        patience=early_stopping["patience"], 
-        score_function=early_stopping["score_function"], 
-        trainer=trainer
+        patience=early_stopping["patience"],
+        score_function=early_stopping["score_function"],
+        trainer=trainer,
     )
     evaluator.add_event_handler(Events.COMPLETED, early_stopping_handler)
-
-    # Run training
-    @trainer.on(Events.EPOCH_COMPLETED)
-    def validate_and_log_results(engine):
-        evaluator.run(val_loader)
-        metrics = evaluator.state.metrics
-        print(f"Epoch {engine.state.epoch} - Validation Loss: {metrics['loss']:.4f}")
 
     # Checkpointing
     checkpoint_handler = ModelCheckpoint(
@@ -237,13 +216,35 @@ def run_training(
         create_dir=True,
         score_function=checkpointing["score_function"],
         score_name=checkpointing["score_name"],
-        require_empty=False,  # Allow saving even if the directory is not empty
-        global_step_transform=global_step_from_engine(trainer)
+        require_empty=False,
+        global_step_transform=global_step_from_engine(trainer),
     )
-
     evaluator.add_event_handler(Events.EPOCH_COMPLETED, checkpoint_handler, {"model": model})
-    
-    # Start trainer
+
+    # Secondary checkpointing (if backup location is provided)
+    if checkpointing.get("backup_location"):
+        checkpoint_handler_secondary = ModelCheckpoint(
+            dirname=checkpointing["backup_location"],
+            filename_prefix=checkpointing["filename_prefix"],
+            n_saved=checkpointing["n_saved"],
+            create_dir=True,
+            score_function=checkpointing["score_function"],
+            score_name=checkpointing["score_name"],
+            require_empty=False,
+            global_step_transform=global_step_from_engine(trainer),
+        )
+        evaluator.add_event_handler(
+            Events.EPOCH_COMPLETED, checkpoint_handler_secondary, {"model": model}
+        )
+
+    # Validation and logging
+    @trainer.on(Events.EPOCH_COMPLETED)
+    def validate_and_log_results(engine):
+        evaluator.run(val_loader)
+        metrics = evaluator.state.metrics
+        print(f"Epoch {engine.state.epoch} - Validation Loss: {metrics['loss']:.4f}")
+
+    # Start training
     trainer.run(train_loader, max_epochs=num_epochs)
 
     if use_tensorboard:
