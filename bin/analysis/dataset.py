@@ -7,7 +7,7 @@ import numpy as np
 import zarr
 
 
-class ZarrDataset(Dataset):
+class _ZarrDataset(Dataset):
     def __init__(
         self,
         image_ids: List[str],
@@ -32,7 +32,7 @@ class ZarrDataset(Dataset):
         if self.metadata_path and self.target_column:
             metadata_df = pd.read_csv(self.metadata_path)
             self.image_id_to_target = {
-                str(row['image_id']): row[self.target_column] for _, row in metadata_df.iterrows()
+                str(row['SlideID']): row[self.target_column] for _, row in metadata_df.iterrows()
             }
 
             if self.class_order:
@@ -94,7 +94,7 @@ class ZarrDataset(Dataset):
         return encoding
     
 
-class _ZarrDataset(Dataset):
+class ZarrDataset(Dataset):
     """
     [deprecated]
     A PyTorch Dataset class that loads features and corresponding targets from Zarr arrays.
@@ -113,38 +113,66 @@ class _ZarrDataset(Dataset):
         will only return the features.
     """
 
-    def __init__(self, image_ids, feature_zarr_dir, agg_type, scan_ds, meta_data_path: Optional[str] = None, target_column: Optional[str]=None, class_order: Optional[torch.Tensor]=None, ordinal: Optional[bool]=False):
+    def __init__(self, image_ids, 
+                 feature_zarr_dir, 
+                 agg_type, 
+                 resolution, 
+                 metadata_path: Optional[str] = None, 
+                 target_column: Optional[str]=None, 
+                 class_order: Optional[torch.Tensor]=None, 
+                 ordinal: Optional[bool]=False):
         self.image_ids = image_ids
         self.feature_zarr_dir=feature_zarr_dir
-        self.zarr_idx=f"SlideLevelFeatures/{agg_type}/{scan_ds}"
-        if meta_data_path is not None:
+        self.agg_type=agg_type
+        if agg_type=="none":
+            self.zarr_idx=f"Features/{resolution}"
+            self.scan_mask=f"ScanMask/{resolution}"
+            self.rng=np.random.default_rng()
+        else:
+            self.zarr_idx=f"SlideLevelFeatures/{agg_type}/{resolution}"
+        if metadata_path is not None:
             if target_column is None:
                 raise ValueError("If metadata_path is provided target_column must be as well")
-            meta_df=pd.read_csv(meta_data_path)
+            meta_df=pd.read_csv(metadata_path)
             id_idx=[]
             for id in image_ids:
                 id_idx.append(meta_df.index[meta_df["SlideID"]==id].to_list()[0])
             meta_targets=meta_df.loc[id_idx,target_column].to_numpy()
             if class_order:
-                targets=torch.zeros((len(image_ids),len(class_order)))
+                targets=np.zeros((len(image_ids),len(class_order)))
                 for ii,id in enumerate(image_ids):
-                    targets[ii,:]=np.equal(class_order,id)
+                    targets[ii,:]=np.equal(class_order,meta_targets[ii])
                     if ordinal and np.any(targets[ii:]):
                         targets[ii,:np.where(targets[ii,:])[0][0]]=1
             else:
                 targets=meta_targets.reshape((-1,1))
-        self.targets = torch.tensor(targets).view
+            self.targets = torch.tensor(targets)
+        else:
+            self.targets = None
 
     def __len__(self) -> int:
-        return self.features.shape[1]
+        return len(self.image_ids)
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         image_id=self.image_ids[idx]
         z=zarr.open(os.path.join(self.feature_zarr_dir,f"ViT_features_{image_id}.zarr"),"r")
-        x=z[self.zarr_idx][:,:]
-        x=torch.tensor(x)
-        t=self.targets[idx,:]
-        return x, t
+        if self.agg_type=="none":
+            scan_mask=z[self.scan_mask][:,:]
+            scan_features=z[self.zarr_idx]
+            idxs=np.where(scan_mask)
+            selection=self.rng.choice(np.arange(len(idxs)),replace=True)
+            
+            x=scan_features[:,idxs[0][selection],idxs[1][selection]]
+            x=torch.tensor(x).reshape(1,-1).float()
+        else:
+            x=z[self.zarr_idx][:]
+            x=torch.tensor(x).reshape(1,-1).float()
+        
+        if self.targets is not None:
+            t=self.targets[idx,:].reshape(1,-1).float()
+            return x, t
+        else:
+            return x
 
 
 def load_features(zarr_path: str, resolution: str) -> np.ndarray:
