@@ -1,5 +1,5 @@
 include {vit_scanner; scan_aggregation} from './src/workflows/vitScanner.nf'
-include {infer_slide_scores} from './src/workflows/inference.nf'
+include {infer_slide_scores, infer_patch_scores, infer_pas_scores} from './src/workflows/inference.nf'
 include {train_model} from './src/workflows/training.nf'
 
 workflow SlideInference {
@@ -19,7 +19,17 @@ workflow PatchInference {
     Channel.fromPath("${params.model_dir_path}/${params.model_name}_final.pt")
         .collect()
         .set{model}
-    infer_scores(image_id,model)
+    infer_patch_scores(image_id,model)
+}
+
+workflow PatchInference {
+    Channel.fromPath(params.meta_csv)
+        .splitCsv(header: true, strip: true)
+        .map{row -> row.SlideID.replaceAll(/[ -]/,"_")}
+        .filter{ it != ""}
+        .set{image_id}
+    infer_pas_scores(image_id)
+}
 
 workflow Scan {
     Channel.fromPath(params.meta_csv)

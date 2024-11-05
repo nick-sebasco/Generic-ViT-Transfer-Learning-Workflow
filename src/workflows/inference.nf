@@ -13,18 +13,30 @@ process SlideInference{
     python3 $projectDir/bin/SlideInference.py $image_ids_path $params.feature_dir_path $model_path $params.agg_type_label $params.scan_ds $params.class_order $params.meta_csv $params.results_file_name $params.results_path
     """
 }
-
-process patchInference{
+process PASInference{
     label 'pytorch'
     input:
-        path image_ids_path
+        path image_ids
         path model_path
     output:
         path "Patch_Scores_*.csv"
-        patth "Mean_Patch_Scores_*.csv"
+        path "Slide_Scores_*.csv"
     script:
     """
-    python3 $projectDir/bin/PatchInference.py $image_ids_path $params.feature_dir_path $model_path $params.scan_ds $params.class_order
+    python3 $projectDir/bin/PASInference.py $image_ids_path $params.feature_dir_path $params.scan_ds
+    """
+}
+process PatchInference{
+    label 'pytorch'
+    input:
+        path image_ids
+        path model_path
+    output:
+        path "Patch_Scores_*.csv"
+        path "Mean_Patch_Scores_*.csv"
+    script:
+    """
+    python3 $projectDir/bin/PatchInference.py $image_ids $params.feature_dir_path $model_path $params.scan_ds $params.class_order
     """
 }
 
@@ -41,6 +53,14 @@ workflow infer_patch_scores {
         model_path
     main:
         PatchInference(image_id,model_path)
+        PatchCSVCombiner(Inference.out[0].collect(),params.patch_scores_prefix)
+        SlideCSVCombiner(Inference.out[1].collect(),params.slide_scores_prefix)
+}
+workflow infer_pas_scores {
+    take:
+        image_id
+    main:
+        PASInference(image_id)
         PatchCSVCombiner(Inference.out[0].collect(),params.patch_scores_prefix)
         SlideCSVCombiner(Inference.out[1].collect(),params.slide_scores_prefix)
 }
