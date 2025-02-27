@@ -1,14 +1,14 @@
 #path to directory of zarrs converted from slides
-image_dir: #no good way to set a default on these...
+image_dir: "" #no good way to set a default on these...
 
 #path to directory of zarrs storing the ViT feature representstion
-feature_dir: #no good way to set a default on these...
+feature_dir: "" #no good way to set a default on these...
 
 #path to directory of zarrs storing ROI masks of the slides
-roi_mask_dir: #no good way to set a default on these...
+roi_mask_dir: "" #no good way to set a default on these...
 
 #label indicating which ROI mask should be used to determine the regions to scan 
-roi_type: "MeanThresh"
+roi_type: "GreenThresh"
 
 #minimum required area in number of pixels for an object to be scanned 
 roi_min_area: 40000
@@ -32,7 +32,7 @@ scan_group_size: 3
 scan_ds: 0
 
 #number of times downssampled before identifying the regions to be scanned
-roi_mask_ds: 0
+roi_mask_ds: 4
 
 #flag indicating if the whole image should be scanned ignoring ROIs
 complete_scan: False
@@ -41,21 +41,21 @@ complete_scan: False
 compute_rois: True
 
 #what model to use for identifying ROIs if not precomputed and compute_rois
-roi_identifier_model: ChannelMeanThresh
+roi_identifier_model: GreenThresh
 
 #Threshold for simple ROI detection models pixels with higer intensity will be considered background
-roi_thresh: .55
+roi_thresh: .8
 
 #size of input to the model
 patch_size: 518
 
 #path to .pth file with alternate weights
-model_checkpoint: ""
+model_checkpoint: "" #no good way to set a default on these...
 
 #target torch device, must be one of ['auto', 'cuda', 'cpu']
 device: auto
 
 #create a mask of which patches have been scanned (useful for sanity checking the scan)
-#creates an ineficent zarr and shoulb be set to false outside of test/debug runs
+#DEPRICIATED MUST BE TRUE FOR DOWNSTREAM STEPS & ZARR V3 WILL ALEVIATE EFFICENCY CONCERNS ONCE IMPLEMENTED 
 scan_mask : true
 
