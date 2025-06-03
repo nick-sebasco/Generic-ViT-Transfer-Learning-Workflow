@@ -17,31 +17,25 @@ include {CSVCombiner as SlideCSVCombiner} from './modules/CSVHandlingUtils'
 process TrainHead{
     label 'pytorch'
     input:
-        val training_image_ids
-        val validation_image_ids
+        path training_image_ids
+        path validation_image_ids
     output:
-        path '<Some Model Name>.pth'
+        path 'models/*_final.pt'
     script:
     """
-    python3 $projectDir/bin/training_script.py $training_image_ids $validation_image_ids $params.feature_dir_path $params.agg_type $params.scan_ds $params.meta_csv $params.target_column $params.class_order $params.ordinal 
+    python3 $projectDir/bin/run_training.py $training_image_ids $validation_image_ids $params.model_name $params.feature_dir_path $params.agg_type_label $params.scan_ds $params.meta_csv $params.target_column $params.class_order $params.ordinal --model_out_dir $params.model_dir_path --num_epochs $params.num_epochs
     """
 }
 
 
 
-workflow infer_scores {
+workflow train_model {
     take:
-        image_id
+        training_image_ids
+        validation_image_ids
     main:
-        Inference(image_id)
-        PatchCSVCombiner(Inference.out[0].collect(),params.patch_scores_prefix)
-        SlideCSVCombiner(Inference.out[1].collect(),params.slide_scores_prefix)
+        TrainHead(training_image_ids,validation_image_ids)
+    emit:
+        TrainHead.out
 }
 
-workflow{
-    Channel.fromPath(params.meta_csv)
-        .splitCSV(header: true, strip: true)
-        .map(row -> row.SlideID)
-        .set(image_id)
-    infer_scores(image_id)
-}
