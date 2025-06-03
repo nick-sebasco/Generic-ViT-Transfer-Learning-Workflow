@@ -1,6 +1,12 @@
-include {vit_scanner; scan_aggregation} from './src/workflows/vitScanner.nf'
+include {vit_scanner; scan_aggregation; qupath2zarr} from './src/workflows/vitScanner.nf'
 include {infer_slide_scores; infer_patch_scores; infer_pas_scores} from './src/workflows/inference.nf'
 include {train_model} from './src/workflows/training.nf'
+
+workflow QuPath2Zarr{
+    Channel.fromPath(params.qupath_mask_dir_path)
+        .set{file_name}
+    qupath2zarr(file_name)
+}
 
 workflow SlideInference {
     Channel.fromPath(params.test_image_ids_path)
@@ -11,9 +17,9 @@ workflow SlideInference {
 }
 
 workflow PatchInference {
-    Channel.fromPath(params.meta_csv)
+    Channel.fromPath(params.test_image_ids_path)
         .splitCsv(header: true, strip: true)
-        .map{row -> row.SlideID.replaceAll(/[ -]/,"_")}
+        .map{row -> row.SlideID.replaceAll(/[ -,]/,"_")}
         .filter{ it != ""}
         .set{image_id}
     Channel.fromPath("${params.model_dir_path}/${params.model_name}_final.pt")
@@ -25,7 +31,7 @@ workflow PatchInference {
 workflow PASInference {
     Channel.fromPath(params.meta_csv)
         .splitCsv(header: true, strip: true)
-        .map{row -> row.SlideID.replaceAll(/[ -]/,"_")}
+        .map{row -> row.SlideID.replaceAll(/[ -,]/,"_")}
         .filter{ it != ""}
         .set{image_id}
     infer_pas_scores(image_id)
@@ -34,7 +40,7 @@ workflow PASInference {
 workflow Scan {
     Channel.fromPath(params.meta_csv)
         .splitCsv(header: true, strip: true)
-        .map{row -> row.SlideID.replaceAll(/[ -]/,"_")}
+        .map{row -> row.SlideID.replaceAll(/[ -,]/,"_")}
         .filter{ it != ""}
         .set{image_id}
     vit_scanner(image_id)
@@ -43,7 +49,7 @@ workflow Scan {
 workflow Agg {
     Channel.fromPath(params.meta_csv)
         .splitCsv(header: true, strip: true)
-        .map{row -> row.SlideID.replaceAll(/[ -]/,"_")}
+        .map{row -> row.SlideID.replaceAll(/[ -,]/,"_")}
         .filter{ it != ""}
         .set{image_id}
     scan_aggregation(image_id)
@@ -52,7 +58,7 @@ workflow Agg {
 workflow Scan_and_Agg{
     Channel.fromPath(params.meta_csv)
         .splitCsv(header: true, strip: true)
-        .map{row -> row.SlideID.replaceAll(/[ -]/,"_")}
+        .map{row -> row.SlideID.replaceAll(/[ -,]/,"_")}
         .filter{ it != ""}
         .set{image_id}
     vit_scanner(image_id)

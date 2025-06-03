@@ -33,6 +33,23 @@ process scanAgg{
     """
 }
 
+process qupath_to_zarr{
+    label 'pytorch'
+    input:
+        path file_name
+    
+    script:
+    """
+    python3 $projectDir/bin/Qupath2ZarrMask.py $file_name  $params.qupath_mask_dir_path $params.roi_zarr_dir $params.qupath_ds $params.mask_names
+    """
+}
+
+workflow qupath2zarr{
+    take:
+        file_name
+    main:
+        qupath_to_zarr(file_name)
+}
 workflow vit_scanner {
     take:
         image_id
