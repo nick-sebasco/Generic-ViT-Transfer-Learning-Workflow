@@ -172,7 +172,8 @@ def prepForViT(image_id : str, image_dir : str, feature_dir : str, roi_mask_dir 
                 roi_type : str, roi_min_area : int, roi_max_area: int,
                 vit_model_channels : int, scan_step : int, batch_size :int, scan_group_size : int,
                 scan_ds : int, roi_mask_ds : int, complete_scan : bool = False, compute_rois : bool = False, 
-                roi_identifier_model : str = None, roi_thresh : float = None, scan_mask : bool = False,patch_size:int=None,model_checkpoint:str=None,device:str=None):
+                roi_identifier_model : str = None, roi_thresh : float = None, scan_mask : bool = False,patch_size:int=None,
+                model_checkpoint:str=None,device:str=None, filter_sigma: float=10):
     """
     prepairs for scanning an image with the ViTScanner
     by identifying regions to scan (if nessesary)
@@ -197,6 +198,7 @@ def prepForViT(image_id : str, image_dir : str, feature_dir : str, roi_mask_dir 
         roi_identifier_model: what model to use for identifying ROIs if not precomputed and compute_rois
         roi_thresh: Threshold for simple ROI detection models
         scan_mask : create a mask of which patches have been scanned (useful for sanity checking the scan but creates an ineficent zarr)
+        filter_sigma: Sigma value for filter (blur).
     """
     image_path=f"{image_dir}slide_{image_id}.zarr"
     roi_mask_path=f"{roi_mask_dir}roi_masks_{image_id}.zarr"
@@ -214,9 +216,9 @@ def prepForViT(image_id : str, image_dir : str, feature_dir : str, roi_mask_dir 
     zm=zarr.open(roi_mask_path)
     if compute_rois or (f"{roi_type}/{roi_mask_ds}" not in zm):
         if roi_identifier_model=="ChannelMeanThresh":
-            id_model=GuasianTissueThresholder(roi_thresh,[0,1,2],lambda x:np.mean(x,axis=0),10)
+            id_model=GuasianTissueThresholder(roi_thresh,[0,1,2],lambda x:np.mean(x,axis=0),filter_sigma)
         elif roi_identifier_model=="GreenThresh":
-            id_model=GuasianTissueThresholder(roi_thresh,[1],lambda x:x.squeeze(),10)
+            id_model=GuasianTissueThresholder(roi_thresh,[1],lambda x:x.squeeze(),filter_sigma)
         else:
             raise ValueError("roi_identifier_model must be one of ['ChannelMeanThresh','GreenThresh']")
         image_ds=zarr.open(image_path)[f'0/{roi_mask_ds}']

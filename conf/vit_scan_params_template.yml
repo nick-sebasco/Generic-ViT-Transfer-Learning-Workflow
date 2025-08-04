@@ -46,6 +46,9 @@ roi_identifier_model: GreenThresh
 #Threshold for simple ROI detection models pixels with higer intensity will be considered background
 roi_thresh: .8
 
+#This is the sigma value used by the Gaussian filter.
+filter_sigma: 10
+
 #size of input to the model
 patch_size: 518
 
