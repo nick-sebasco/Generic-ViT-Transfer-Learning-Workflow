@@ -113,3 +113,4 @@ def vitScan(image_id : str, scan_group_csv : str, image_dir : str, feature_dir :
 
 if __name__=="__main__":
     CLI(vitScan)
+
