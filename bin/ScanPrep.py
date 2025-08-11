@@ -200,7 +200,7 @@ def prepForViT(image_id : str, image_dir : str, feature_dir : str, roi_mask_dir 
         scan_mask : create a mask of which patches have been scanned (useful for sanity checking the scan but creates an ineficent zarr)
         filter_sigma: Sigma value for filter (blur).
     """
-    image_path=f"{image_dir}slide_{image_id}.zarr"
+    image_path=f"{image_dir}{image_id}.zarr"
     roi_mask_path=f"{roi_mask_dir}roi_masks_{image_id}.zarr"
     feature_path=f"{feature_dir}ViT_features_{image_id}.zarr"
 
