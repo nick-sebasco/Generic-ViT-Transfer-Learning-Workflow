@@ -16,7 +16,7 @@ def vitScan(image_id : str, scan_group_csv : str, image_dir : str, feature_dir :
             roi_type : str=None, roi_min_area : int=None, roi_max_area: int=None,
             vit_model_channels : int=None, batch_size :int=None, scan_group_size : int=None,
             roi_mask_ds : int=None, complete_scan : bool = False, compute_rois : bool = False, 
-                roi_identifier_model : str = None, roi_thresh : float = None):
+                roi_identifier_model : str = None, roi_thresh : float = None, filter_sigma: float = None):
     """
     Scans selected patches of an image using a pretrained pytorch model and saves features to a prepaired zarr file. 
 
