@@ -1,4 +1,6 @@
 import warnings
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import torch
@@ -56,6 +58,7 @@ def vitScan(
     normalization_ref_size: int = 512,
     normalization_ref_strategy: str = "random",
     feature_tag: str = "",
+    normalization_png_dir: str = ""
 ) -> int:
     """
     Scan (feature-extract) ViT patches for a slide, optionally applying stain
@@ -115,6 +118,8 @@ def vitScan(
         "random" or "median" for reference patch location strategy.
     feature_tag : str
         Optional suffix for feature zarr name (e.g., "_reinhard") to avoid overwriting raw features.
+    normalization_png_dir: str
+        directory where pngs are saved.
 
     Notes
     -----
@@ -185,6 +190,43 @@ def vitScan(
         zf.attrs[k] = v
     zf.attrs["feature_tag"] = feature_tag
 
+     # --- prepare normalized Zarr at the SCAN ds (same as patches) ---
+    # We will fill this with the ALREADY-NORMALIZED patches as we scan.
+    # TODO: could encapsulate the building of the normalized zarr in the
+    # stain normalization api.
+    norm_ds = None
+    norm_zarr_path = None
+    if apply_normalization and normalization_png_dir:
+        try:
+            Path(normalization_png_dir).mkdir(parents=True, exist_ok=True)
+
+            # normalized zarr path next to PNGs; dataset key is exactly "0/{scan_ds}"
+            norm_zarr_path = str(Path(normalization_png_dir) / f"{image_id}__normalized.zarr")
+            zn = zarr.open(norm_zarr_path, mode="w")
+            g = zn.create_group("0")
+            
+            # image is zi[f"0/{scan_ds}"] -> [T,C,Z,Y,X]
+            H = int(image.shape[3])
+            W = int(image.shape[4])
+
+            # baseline = RAW CHW at same ds (uint8)
+            raw_chw = np.asarray(image[0, :, 0, :, :])
+            raw_u8 = _ensure_uint8(raw_chw)
+
+            norm_ds = g.create_dataset(
+                str(scan_ds),
+                shape=(1, 3, 1, H, W),
+                dtype=np.uint8,
+                chunks=(1, 3, 1, min(1024, H), min(1024, W)),
+                overwrite=True,
+            )
+            # initialize with raw so untouched regions look coherent
+            norm_ds[0, :, 0, :, :] = raw_u8
+        except Exception as e:
+            print(f"[vitScan] could not prepare normalized zarr for PNG: {e}")
+            norm_ds = None
+            norm_zarr_path = None
+
     # ------------- load scan groups -------------
     scan_groups_df = pd.read_csv(scan_group_csv)
     scan_groups = scan_groups_df.groupby("Batch")
@@ -192,6 +234,7 @@ def vitScan(
     # ------------- main loop -------------
     for _, scan_group in scan_groups:
         print(f"Scanning group size: {scan_group.shape[0]}")
+
         # pre-allocate; we’ll subset down to kept patches
         batch = np.zeros((scan_group.shape[0], 3, patch_size, patch_size), dtype=np.uint8)
         keep_patches = np.array([], dtype=np.uint64)
@@ -234,6 +277,16 @@ def vitScan(
                 keep_patches = np.append(keep_patches, ii)
                 batch[ii, :, :, :] = patch_u8
 
+                # write normalized patch into the normalized zarr for PNG (same ds)
+                if norm_ds is not None:
+                    # write only the valid (non-padded) area to avoid spilling over edges
+                    y0, x0 = row.IPos, row.JPos
+                    y1, x1 = y0 + h, x0 + w
+                    try:
+                        norm_ds[0, :, 0, y0:y1, x0:x1] = patch_u8[:, :h, :w]
+                    except Exception as e:
+                        print(f"[vitScan] warn: failed normalized write at {(y0,y1,x0,x1)}: {e}")
+
         # nothing to do for this group
         if keep_patches.size == 0:
             continue
@@ -263,8 +316,18 @@ def vitScan(
             if scan_mask:
                 zf[f"ScanMask/{scan_ds}"][ipos, jpos] = 1
 
-    return 0
+    if norm_ds is not None and norm_zarr_path is not None:
+        try:
+            print("[vitScan] attempting to save normalized zarr.")
+            NormContext.dump_target_png(
+                target_zarr=norm_zarr_path,
+                ds_key=f"0/{scan_ds}",
+                output_dir=normalization_png_dir,
+            )
+        except Exception as e:
+            print(f"[vitScan] normalized PNG dump failed for {image_id}: {e}")
 
+    return 0
 
 #To-Do figure out how to set the arcetecture via string
 def vitScan_V0(image_id : str, scan_group_csv : str, image_dir : str, feature_dir : str, scan_step : int, scan_ds : int, patch_size : int, model_checkpoint : str = None, device : str = 'auto', scan_mask : bool = False,
