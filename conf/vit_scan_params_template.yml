@@ -88,3 +88,12 @@ normalization_ref_size: 512
 normalization_ref_strategy: random
 # 0 = per-patch normalization (fastest to wire in); >0 = tile size if you later normalize bigger tiles
 normalization_tile: 0
+
+# --- Low resolution PNG for stain normalization debugging ---
+# Directory to write the PNGs (created if it does not exist).
+normalization_png_dir: ""
+
+# Which pyramid key to export for PNGs. If empty, defaults to scan ds ("0/{scan_ds}").
+# Examples: "0/6", "0/4"
+normalization_png_ds: ""
+
