@@ -55,6 +55,10 @@ class NormContext:
         ref_size: int = 512,
         ref_strategy: str = "random",
         rng_seed: int = 0,
+        # <-- add this
+        use_full_ref_roi: bool = False,
+        # <-- safety cap so we don’t blow RAM
+        max_ref_side: int = 4096
     ):
         """
         Construct a normalization context. If 'apply_normalization' is False, returns a no-op context.
@@ -85,9 +89,12 @@ class NormContext:
         ref_mask = cls._nearest_resize_mask(ref_mask, ref_hwc.shape[:2])
 
         # Choose a reference patch inside tissue
-        ref_patch = cls._pick_reference_patch(
-            ref_hwc, ref_mask, ref_size=ref_size, strategy=ref_strategy, rng_seed=rng_seed
-        )
+        if use_full_ref_roi:
+            ref_patch = cls._pack_tissue_square(ref_hwc, ref_mask, max_side=max_ref_side)
+        else:
+            ref_patch = cls._pick_reference_patch(
+                ref_hwc, ref_mask, ref_size=ref_size, strategy=ref_strategy, rng_seed=rng_seed
+            )
 
         # Fit Reinhard
         # TODO: can we dump/ save parameters and pass down from ScanPrep?
@@ -154,6 +161,38 @@ class NormContext:
         yy = np.clip(yy, 0, mask.shape[0] - 1)
         xx = np.clip(xx, 0, mask.shape[1] - 1)
         return mask[yy[:, None], xx[None, :]]
+
+    @staticmethod
+    def _pack_tissue_square(
+        hwc: np.ndarray,
+        mask: np.ndarray,
+        max_side: int = 4096
+    ) -> np.ndarray:
+        """
+        Use *all* tissue pixels from ROI to form a square image for fitting.
+        Caps the output side to avoid huge allocations (keeps ~max_side^2 pixels).
+        """
+        yy, xx = np.where(mask)
+        if yy.size == 0:
+            return hwc  # fallback: entire image
+
+        # Extract all tissue pixels (H*W, C) and optionally subsample if massive
+        pixels = hwc[yy, xx, :]  # shape: (N, 3)
+        N = pixels.shape[0]
+
+        # Cap the total pixels to max_side^2
+        cap = max_side * max_side
+        if N > cap:
+            idx = np.linspace(0, N - 1, cap, dtype=np.int64)
+            pixels = pixels[idx]
+            N = cap
+
+        # Pack into a square
+        side = int(np.floor(np.sqrt(N)))
+        M = side * side
+        pixels = pixels[:M]                      # (M, 3)
+        tile = pixels.reshape(side, side, 3)     # (side, side, 3)
+        return tile.astype(np.uint8)
 
     @staticmethod
     def _pick_reference_patch(
