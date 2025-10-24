@@ -4,6 +4,11 @@ image_dir: "" #no good way to set a default on these...
 #path to directory of zarrs storing the ViT feature representstion
 feature_dir: "" #no good way to set a default on these...
 
+# NEW:
+# e.g., "" or "_reinhard".  Adding this to prevent overwriting 
+# previously computed features.
+feature_tag: "_normal"
+
 #path to directory of zarrs storing ROI masks of the slides
 roi_mask_dir: "" #no good way to set a default on these...
 
@@ -58,4 +63,51 @@ device: auto
 #create a mask of which patches have been scanned (useful for sanity checking the scan)
 #DEPRICIATED MUST BE TRUE FOR DOWNSTREAM STEPS & ZARR V3 WILL ALEVIATE EFFICENCY CONCERNS ONCE IMPLEMENTED 
 scan_mask : true
+
+# --- stain normalization (optional) ---
+# turn on/off
+apply_normalization: false
+# for future extensibility
+normalization_method: reinhard
+
+# TODO: How do we choose a good stain reference?  Inclination to reference NW.
+# Can we select reference based on skin score.
+# manually set path to reference image stain zarr e.g. /.../Zarrs/REF_IMAGE.zarr
+normalization_ref_zarr: ""
+# manually set path to roi mask correspomnding to normalization_ref_zarr e.g. /.../ROIZarrs/roi_masks_REF_IMAGE.zarr
+# NOTE: if you don't include this you will end up normalizing the slide background
+normalization_ref_roi_zarr: ""
+
+# ds key inside ref image zarr (can reuse scan ds key if you want)
+normalization_ref_ds: "0/6"
+normalization_ref_roi_type: "GreenThresh"
+normalization_ref_roi_ds: 4
+
+# Two methods for choosing a reference patch:
+# 1) _pick_reference_patch: use_full_ref_roi = False
+#   Use a predined patch where you control patch size & strategy. 
+# 2) _pack_tissue_square: use_full_ref_roi = True
+#   Use as much of tissue roi as we can for the reference.
+use_full_ref_roi: true
+
+# optional RAM safety cap if we use the whole ROI
+max_ref_side: 4096
+
+# reference patch size for fit()
+normalization_ref_size: 512
+# random | median
+normalization_ref_strategy: random
+
+# --- Low resolution PNG for stain normalization debugging ---
+# By default per workflow run we save: every nornmalized target zarr as a png
+# and the reference zarr.  if `save_raw_target_png` is set to true, then the
+# un-normalized target will also be saved as a png.
+save_raw_target_png: false
+
+# Directory to write the PNGs (created if it does not exist).
+normalization_png_dir: ""
+
+# TODO: would like to replace `normalization_png_ds` with max_dim (pixels) or png_size (bytes)
+# instead of normalization_png_ds. (ALready got rid of it)
+
 

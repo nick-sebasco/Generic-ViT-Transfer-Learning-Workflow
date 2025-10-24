@@ -67,8 +67,6 @@ class GuasianTissueThresholder:
         if np.max(arr_sub)>1:
             arr_sub=arr_sub/255
         return np.less_equal(arr_sub,self.thresh)
-        
-
 
 
 def findRegions(roi_mask, roi_min_area=0, roi_max_area=0):
