@@ -4,6 +4,9 @@ model_cache/
 test_data/
 local_conf/
 
+# TODO: could remove tracked conf directory and then ignore everything in local_conf execpt a template
+slurm
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

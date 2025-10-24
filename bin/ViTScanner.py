@@ -28,6 +28,27 @@ def _ensure_uint8(chw: np.ndarray) -> np.ndarray:
     return np.clip(out, 0, 255).astype(np.uint8)
 
 
+def f_extract(
+    batch: torch.Tensor,
+    model: torch.nn.Module,
+    model_type: str
+):
+    """
+    Return features for either ViT (headless) or AlexNet (intermediate layer).
+    """
+    with torch.inference_mode():
+        if model_type.lower().strip() == "alexnet":
+            x = model.features(batch)
+            x = model.avgpool(x)
+            x = torch.flatten(x, end_dim=-2)
+            # FC + ReLU (dim=4096)
+            x = model.classifier[:2](x)
+        else:
+            # ViT with heads replaced by Identity -> embedding dim (ViT-H/14 = 1280)
+            x = model(batch)
+    return x
+
+
 # -------------------------
 # vitScan
 # -------------------------
@@ -45,6 +66,7 @@ def vitScan(
     scan_group_size: int = 3,
     model_checkpoint: str = "",
     device: str = "auto",
+    model_type: str = "ViT",
     roi_type: str = "GreenThresh",
     roi_mask_ds: int = 4,
     scan_mask: bool = True,
@@ -146,10 +168,20 @@ def vitScan(
         raise ValueError("device must be one of ['auto', 'cuda', 'cpu']")
 
     # ------------- model -------------
-    model = torchvision.models.vit_h_14(image_size=patch_size)
-    if model_checkpoint:
-        model.load_state_dict(torch.load(model_checkpoint, map_location=device))
-    model.heads = torch.nn.Sequential(torch.nn.Identity())
+    mt = (model_type or "ViT").lower().strip()
+    if mt == "alexnet":
+        # torchvision helper, not the class name
+        model = torchvision.models.alexnet()
+        if model_checkpoint:
+            model.load_state_dict(torch.load(model_checkpoint, map_location=device))
+        # no head removal needed; we slice inside f_extract
+    else:
+        model = torchvision.models.vit_h_14(image_size=patch_size)
+        if model_checkpoint:
+            model.load_state_dict(torch.load(model_checkpoint, map_location=device))
+        # remove classifier head to expose embeddings
+        model.heads = torch.nn.Sequential(torch.nn.Identity())
+
     model.to(device)
     model.eval()
 
@@ -243,7 +275,7 @@ def vitScan(
     for _, scan_group in scan_groups:
         print(f"Scanning group size: {scan_group.shape[0]}")
 
-        # pre-allocate; we’ll subset down to kept patches
+        # pre-allocate; we'll subset down to kept patches
         batch = np.zeros((scan_group.shape[0], 3, patch_size, patch_size), dtype=np.uint8)
         keep_patches = np.array([], dtype=np.uint64)
 
@@ -304,9 +336,8 @@ def vitScan(
 
         # to torch float32 in [0,1]
         batch_t = torch.tensor(batch, device=device, dtype=torch.float32) / 255.0
-
-        with torch.inference_mode():
-            features_t = model(batch_t)
+        # unified feature extraction
+        features_t = f_extract(batch_t, model, model_type)
 
         features = features_t.detach().cpu().numpy()
 

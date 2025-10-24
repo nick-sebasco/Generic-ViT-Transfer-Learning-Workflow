@@ -14,3 +14,26 @@ Our goal is to provide a user-friendly experience that abstracts away the comple
 + Efficient patch-based processing for large gigapixel images
 + Automatic region detection and feature extraction
 + Flexible training pipeline with Ignite integration
+
+## Environment
+You can run the workflow using the following singularity container: 
+
+```
+/projects/korstanje-lab/singularity-containers/vit_tiatoolbox.sif
+```
+
+## TODO
+
++ [x] Diff ViTScanner:ScanPrep with Generic-ViT:ScanPrep 
++ [x] Diff ViTScanner:ViTScanner with Generic-ViT:ViTScanner 
++ [ ] Diff ViTScanner:ViTScanner with Generic-ViT:ViTScanner 
++ [ ] Diff ViTScanner:vitscanner.nf with Generic-ViT:vitscanner.nf 
++ [ ] Diff ViTScanner:main.nf with Generic-ViT:main.nf
+
++ [ ] New requirement for running workflow is two separate configs: scanprep & vitscanner
+
+### Low Priority
++ [ ] keep only conf or local conf
++ [ ] add basic test for scanning code
++ [ ] make sure stain normalization tests run
++ [ ] make sure training tests run
