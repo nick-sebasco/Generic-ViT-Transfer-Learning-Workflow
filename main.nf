@@ -77,3 +77,15 @@ workflow TrainSlideInfer{
     train_model(training_image_ids,validation_image_ids)
     infer_slide_scores(test_image_ids,train_model.out)
 }
+
+workflow TrainPatchInfer{
+    Channel.fromPath(params.training_image_ids_path).set{training_image_ids}
+    Channel.fromPath(params.validation_image_ids_path).set{validation_image_ids}
+    Channel.fromPath(params.test_image_ids_path)
+        .splitCsv(header: true, strip: true)
+        .map{row -> row.SlideID.replaceAll(/[ -,]/,"_")}
+        .filter{ it != ""}
+        .set{test_image_ids}
+    train_model(training_image_ids,validation_image_ids)
+    infer_patch_scores(test_image_ids,train_model.out.collect())
+}

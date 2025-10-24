@@ -26,10 +26,14 @@ You can run the workflow using the following singularity container:
 
 + [x] Diff ViTScanner:ScanPrep with Generic-ViT:ScanPrep 
 + [x] Diff ViTScanner:ViTScanner with Generic-ViT:ViTScanner 
-+ [ ] Diff ViTScanner:ViTScanner with Generic-ViT:ViTScanner 
-+ [ ] Diff ViTScanner:vitscanner.nf with Generic-ViT:vitscanner.nf 
-+ [ ] Diff ViTScanner:main.nf with Generic-ViT:main.nf
++ [x] Diff ViTScanner:ScanAggregators with Generic-ViT:ScanAggregators 
++ [x] Diff ViTScanner:csvCombiner with Generic-ViT:csvCombiner 
++ [x] Diff ViTScanner:vitscanner.nf with Generic-ViT:vitscanner.nf 
++ [x] Diff ViTScanner:main.nf with Generic-ViT:main.nf
 
+
++ [] scan test with new workflow repo.  create a small test dataset of 2 images.  Run once on old workflow and
+    once with the new one.
 + [ ] New requirement for running workflow is two separate configs: scanprep & vitscanner
 
 ### Low Priority
