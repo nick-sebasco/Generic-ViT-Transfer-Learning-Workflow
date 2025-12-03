@@ -24,6 +24,8 @@ You can run the workflow using the following singularity container:
 
 ## TODO
 
+
+
 + [x] Diff ViTScanner:ScanPrep with Generic-ViT:ScanPrep 
 + [x] Diff ViTScanner:ViTScanner with Generic-ViT:ViTScanner 
 + [x] Diff ViTScanner:ScanAggregators with Generic-ViT:ScanAggregators 

@@ -8,7 +8,7 @@ process scanPrep{
     // old way: $params.scan_params_config
     // stain normalization: $params.scan_prep_config
     """
-    python3 $projectDir/bin/ScanPrep.py $image_id --config $projectDir/$params.scan_params_config
+    python3 $projectDir/bin/ScanPrep.py $image_id --config $projectDir/$params.scan_prep_config
     """
 }
 process vitScan{
@@ -26,7 +26,7 @@ process vitScan{
     python3 $projectDir/bin/ViTScanner.py \\
     $image_id \\
     scan_group.csv \\
-    --config $projectDir/$params.scan_params_config
+    --config $projectDir/$params.vit_scan_config
     """
 }
 
