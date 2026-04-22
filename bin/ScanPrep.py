@@ -238,7 +238,7 @@ def prepForViT(
     """
     image_path=f"{image_dir}{image_id}.zarr"
     roi_mask_path=f"{roi_mask_dir}roi_masks_{image_id}.zarr"
-    feature_path=f"{feature_dir}ViT_features_{image_id}.zarr"
+    feature_path=f"{feature_dir}ViT_features_{image_id}{feature_tag}.zarr"
 
     #pre-create zarr array to contain feature scan (prevents race condition issiues that would arise if initialized at scan time)
     zi=zarr.open(image_path)

@@ -1,5 +1,6 @@
 import warnings
 from pathlib import Path
+import json
 
 import numpy as np
 import pandas as pd
@@ -7,7 +8,6 @@ import torch
 import torchvision
 import zarr
 from jsonargparse import CLI
-
 
 from stain_normalize import NormContext
 
@@ -225,12 +225,30 @@ def vitScan(
         max_ref_side=max_ref_side,
     )
 
+    # Note: Old method throws OSError
     # attrs on feature zarr
-    for k, v in norm_ctx.meta.items():
-        zf.attrs[k] = v
-    zf.attrs["feature_tag"] = feature_tag
+    # for k, v in norm_ctx.meta.items():
+    #     # indexing into attrs may not be valid
+    #     zf.attrs[k] = v
+    # zf.attrs["feature_tag"] = feature_tag
 
-     # --- prepare normalized Zarr at the SCAN ds (same as patches) ---
+    meta = {k:v for k, v in norm_ctx.meta.items()}
+    meta["feature_tag"] = feature_tag
+
+    try:
+        zf.attrs.update(meta)
+    except OSError as e:
+        print(f"|WARN| failed to write zarr attrs for {feature_path}: {e}")
+        # sidecar JSON next to the zarr store
+        sidecar = Path(feature_path.rstrip("/")) / ".meta.json"
+        try:
+            with open(sidecar, "w") as f:
+                json.dump(meta, f, indent=2)
+            print(f"|INFO| wrote metadata to sidecar file {sidecar}")
+        except Exception as e2:
+            print(f"|WARN| also failed to write sidecar metadata: {e2}")
+
+    # --- prepare normalized Zarr at the SCAN ds (same as patches) ---
     # We will fill this with the ALREADY-NORMALIZED patches as we scan.
     # TODO: could encapsulate the building of the normalized zarr in the
     # stain normalization api.
