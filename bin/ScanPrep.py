@@ -67,7 +67,7 @@ class GuasianTissueThresholder:
         if np.max(arr_sub)>1:
             arr_sub=arr_sub/255
         return np.less_equal(arr_sub,self.thresh)
-
+        
 
 def findRegions(roi_mask, roi_min_area=0, roi_max_area=0):
     """
@@ -97,6 +97,7 @@ def findRegions(roi_mask, roi_min_area=0, roi_max_area=0):
     keep_sections=np.logical_and(np.greater_equal(sections_df.loc[:,"area"],roi_min_area),np.less_equal(sections_df.loc[:,"area"],roi_max_area))
     return sections_df.loc[keep_sections,:]
 
+
 def scanBatching(image_id, sections, scan_step, batch_size, scan_group_size, scan_ds, roi_mask_ds):
     """
     Breaks the Bounding Box for each ROI into patches to be scanned and assigns each patch to a batch and scan group for scanning 
@@ -104,17 +105,17 @@ def scanBatching(image_id, sections, scan_step, batch_size, scan_group_size, sca
 
     Parameters
     -------------
-    image_id : str
+    image_id: str
         id of target slide
     sections : DataFrame from skimage.measure.regionprops_tabel
         Section DataFrame containing bounding boxes of the regions to be scanned
-    scan_step : int
+    scan_step: int
         size of step between scan patches
-    batch_size : int
+    batch_size: int
         number of patches per batch
-    scan_group_size : int
+    scan_group_size: int
         number of batches to be handeled by each scan process 
-    scan_ds : int
+    scan_ds: int
         number of times to downsample befor scanning (scan patch will be 1/2^(scan_ds) the resolution of the initial image)
     roi_mask_ds
         number of times downssampled before identifying the regions to be scanned
@@ -166,12 +167,49 @@ def scanBatching(image_id, sections, scan_step, batch_size, scan_group_size, sca
     batch_df.to_csv(f"{image_id}_scan_group_{scan_group_itt}.csv",index=False)
     return None
 
-def prepForViT(image_id : str, image_dir : str, feature_dir : str, roi_mask_dir : str,
-                roi_type : str, roi_min_area : int, roi_max_area: int,
-                vit_model_channels : int, scan_step : int, batch_size :int, scan_group_size : int,
-                scan_ds : int, roi_mask_ds : int, complete_scan : bool = False, compute_rois : bool = False, 
-                roi_identifier_model : str = None, roi_thresh : float = None, scan_mask : bool = False,patch_size:int=None,
-                model_checkpoint:str=None,device:str=None, filter_sigma: float=10):
+
+def prepForViT(
+    image_id: str,
+    image_dir: str,
+    feature_dir: str,
+    roi_mask_dir: str,
+    roi_type: str,
+    roi_min_area: int,
+    roi_max_area: int,
+    vit_model_channels: int,
+    scan_step: int,
+    batch_size :int,
+    scan_group_size: int,
+    scan_ds: int,
+    roi_mask_ds: int,
+    complete_scan : bool = False,
+    compute_rois : bool = False, 
+    roi_identifier_model: str = None,
+    roi_thresh : float = None,
+    scan_mask : bool = False,
+    patch_size:int=None,
+    model_checkpoint:str=None,
+    device:str=None,
+    filter_sigma: float=10,
+    model_type:str=None,
+
+    # TODO: should not be doing this.  we should have 2 separate yaml files.
+    # --- accept (but ignore) normalization-related keys so the shared YAML validates for ScanPrep ---
+    apply_normalization: bool = False,
+    normalization_method: str = "reinhard",
+    normalization_ref_zarr: str = "",
+    normalization_ref_roi_zarr: str = "",
+    normalization_ref_ds: str = "",
+    normalization_ref_roi_type: str = "",
+    normalization_ref_roi_ds: int = 0,
+    normalization_ref_size: int = 512,
+    normalization_ref_strategy: str = "random",
+    normalization_png_dir: str = "",
+    save_raw_target_png: bool = False,
+    use_full_ref_roi: bool = False,
+    max_ref_side: int = 4096,
+    feature_tag: str = "",
+):
     """
     prepairs for scanning an image with the ViTScanner
     by identifying regions to scan (if nessesary)
@@ -200,7 +238,7 @@ def prepForViT(image_id : str, image_dir : str, feature_dir : str, roi_mask_dir 
     """
     image_path=f"{image_dir}{image_id}.zarr"
     roi_mask_path=f"{roi_mask_dir}roi_masks_{image_id}.zarr"
-    feature_path=f"{feature_dir}ViT_features_{image_id}.zarr"
+    feature_path=f"{feature_dir}ViT_features_{image_id}{feature_tag}.zarr"
 
     #pre-create zarr array to contain feature scan (prevents race condition issiues that would arise if initialized at scan time)
     zi=zarr.open(image_path)
@@ -237,14 +275,4 @@ def prepForViT(image_id : str, image_dir : str, feature_dir : str, roi_mask_dir 
 
 if __name__=="__main__":
     CLI(prepForViT)
-
-
-
-
-
-    
-
-
-
-    
 

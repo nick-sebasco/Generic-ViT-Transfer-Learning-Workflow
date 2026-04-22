@@ -5,19 +5,28 @@ process scanPrep{
     output:
         tuple val(image_id), path('*_scan_group_*.csv')
     script:
+    // old way: $params.scan_params_config
+    // stain normalization: $params.scan_prep_config
     """
-    python3 $projectDir/bin/ScanPrep.py $image_id --config $projectDir/$params.scan_params_config
+    python3 $projectDir/bin/ScanPrep.py $image_id --config $projectDir/$params.scan_prep_config
     """
 }
 process vitScan{
     label 'pytorch'
+    time '1h'
+    memory '16 GB'
     input:
         tuple val(image_id), path("scan_group.csv")
     output:
         val image_id
     script:
+    // old way: $params.scan_params_config
+    // stain normalization: $params.vit_scan_config
     """
-    python3 $projectDir/bin/ViTScanner.py $image_id scan_group.csv --config $projectDir/$params.scan_params_config
+    python3 $projectDir/bin/ViTScanner.py \\
+    $image_id \\
+    scan_group.csv \\
+    --config $projectDir/$params.vit_scan_config
     """
 }
 
